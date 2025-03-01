@@ -64,7 +64,7 @@
       border-top: 1px solid #ccc;
       display: none;
       align-items: center;
-      justify-content: space-between;
+      justify-content: flex-start;
       padding: 10px;
       box-sizing: border-box;
       margin-top: 5px;
@@ -129,7 +129,7 @@
     <canvas id="checkersCanvas" width="720" height="720"></canvas>
   </div>
   
-  <!-- Bottom Bar with Turn Info & "Think For Me" Button -->
+  <!-- Bottom Bar with Turn Info (no "Think For Me" button) -->
   <div id="bottomBar">
     <span id="turnDisplay">Turn: </span>
   </div>
@@ -149,7 +149,6 @@
     const gameOverText = document.getElementById("gameOverText");
     const bottomBar = document.getElementById("bottomBar");
     const turnDisplay = document.getElementById("turnDisplay");
-    const thinkBtn = document.getElementById("thinkBtn");
     
     let gameState = "menu"; // "menu", "color_choice", "difficulty_choice", "playing", "instructions", "game_over"
     let playerColor = null;  // "black" or "red" chosen by human
@@ -307,7 +306,7 @@
       if (!piece) return [];
       let moves = [];
       let offsets = piece.king ? KING_DIRECTIONS : dirOffsets[piece.color];
-      // First, check for capture moves.
+      // Check for capture moves.
       for (let d of offsets) {
         let midR = r + d.dr, midC = c + d.dc;
         let endR = r + 2 * d.dr, endC = c + 2 * d.dc;
@@ -320,7 +319,7 @@
         }
       }
       if (moves.length > 0) return moves;
-      // If no captures, check for normal moves.
+      // Otherwise, normal moves.
       for (let d of offsets) {
         let newR = r + d.dr, newC = c + d.dc;
         if (newR >= 0 && newR < 8 && newC >= 0 && newC < 8 && bd[newR][newC] === null) {
@@ -545,26 +544,6 @@
     }
     
     canvas.addEventListener("pointerdown", handleCanvasInput);
-    
-    /************ "Think For Me" Button Handler ************/
-            return;
-          }
-        }
-      } else {
-        makeMove(move);
-        if (move.capture && canContinueCapture(move.to.r, move.to.c)) {
-          selectedPiece = { r: move.to.r, c: move.to.c };
-          legalMoves = getPieceMoves(selectedPiece.r, selectedPiece.c).filter(m => m.capture);
-          redraw();
-          return;
-        }
-      }
-      selectedPiece = null;
-      legalMoves = [];
-      swapTurn();
-      checkGameOver();
-      redraw();
-    });
     
     /************ Overlay & Menu Management ************/
     function hideAllScreens() {
