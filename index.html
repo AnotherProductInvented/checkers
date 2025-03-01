@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Another Product Invented Checkers</title>
+  <style>
+    /* Basic layout & styling */
+    body {
+      margin: 0;
+      padding: 0;
+      background: #fff;
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+    }
+    h1 {
+      margin: 1rem 0 0.5rem;
+      text-align: center;
+    }
+    #gameContainer {
+      position: relative;
+      width: 720px;
+      max-width: 100%;
+      margin-bottom: 60px;
+    }
+    canvas {
+      display: block;
+      background: #eee;
+      width: 100%;
+      height: auto;
+      border: 2px solid #333;
+    }
+    /* Overlays for menus, instructions, color selection, game over */
+    .overlayScreen {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(255,255,255,0.95);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      z-index: 10;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+    button {
+      font-size: 18px;
+      margin: 10px;
+      padding: 10px 20px;
+      cursor: pointer;
+    }
+    /* Bottom bar visible during play */
+    #bottomBar {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: 50px;
+      background: #fff;
+      border-top: 1px solid #ccc;
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 10px;
+      box-sizing: border-box;
+      z-index: 5;
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <h1>Another Product Invented Checkers</h1>
+  
+  <!-- Game Container -->
+  <div id="gameContainer">
+    <!-- Overlays -->
+    <div id="menuScreen" class="overlayScreen" style="display:flex;">
+      <button id="newGameBtn">New Game</button>
+      <button id="instructionsBtn">Instructions</button>
+    </div>
+    <div id="colorScreen" class="overlayScreen">
+      <p>Choose Your Side:</p>
+      <button id="blackSideBtn">Black [B]</button>
+      <button id="redSideBtn">Red [R]</button>
+      <p>You can also press B or R on your keyboard.</p>
+    </div>
+    <div id="instructionsScreen" class="overlayScreen">
+      <h2>How to Play Checkers</h2>
+      <p>
+        Standard checkers is played on an 8×8 board. Only dark squares are used.
+        Each player’s pieces move diagonally forward.
+        Capture an opponent’s piece by jumping over it. If a capture is available, you must take it.
+        When a piece reaches the far side, it is crowned as a king and may move backwards.
+      </p>
+      <p>Press [M] to return to the Main Menu.</p>
+    </div>
+    <div id="gameOverScreen" class="overlayScreen">
+      <h2 id="gameOverText"></h2>
+      <button id="gameOverNewGameBtn">New Game</button>
+      <p>Press [M] to return to the Main Menu.</p>
+    </div>
+    
+    <!-- The game canvas -->
+    <canvas id="checkersCanvas" width="720" height="720"></canvas>
+    
+    <!-- Bottom bar: displays turn and "Think For Me" button -->
+    <div id="bottomBar">
+      <span id="turnDisplay">Turn: </span>
+      <button id="thinkBtn">Think For Me</button>
+    </div>
+  </div>
+  
+  <script>
+    /*******************************
+     * Global Variables & Game State
+     *******************************/
+    const canvas = document.getElementById("checkersCanvas");
+    const ctx = canvas.getContext("2d");
+    const menuScreen = document.getElementById("menuScreen");
+    const colorScreen = document.getElementById("colorScreen");
+    const instructionsScreen = document.getElementById("instructionsScreen");
+    const gameOverScreen = document.getElementById("gameOverScreen");
+    const gameOverText = document.getElementById("gameOverText");
+    const bottomBar = document.getElementById("bottomBar");
+    const turnDisplay = document.getElementById("turnDisplay");
+    const thinkBtn = document.getElementById("thinkBtn");
+    
+    let gameState = "menu"; // "menu", "color_choice", "playing", "instructions", "game_over"
+    let playerColor = null; // "black" or "red" chosen by player
+    let currentPlayer = "black"; // Black always starts
+    let board = [];
+    let selectedPiece = null; // { r, c }
+    let legalMoves = []; // array of move objects for the selected piece
+    let multiCapture = false; // indicates if a multi-capture is in progress
+
+    const SQUARE_SIZE = canvas.width / 8;
+    
+    /*******************************
+     * Board Initialization
+     *******************************/
+    function initBoard() {
+      board = [];
+      // Create an 8x8 board initialized to null
+      for (let r = 0; r < 8; r++) {
+        board[r] = [];
+        for (let c = 0; c < 8; c++) {
+          board[r][c] = null;
+        }
+      }
+      // Place black pieces on rows 0,1,2 on dark squares ((r+c)%2===1)
+      for (let r = 0; r < 3; r++) {
+        for (let c = 0; c < 8; c++) {
+          if ((r + c) % 2 === 1) {
+            board[r][c] = { color: "black", king: false };
+          }
+        }
+      }
+      // Place red pieces on rows 5,6,7 on dark squares
+      for (let r = 5; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          if ((r + c) % 2 === 1) {
+            board[r][c] = { color: "red", king: false };
+          }
+        }
+      }
+      currentPlayer = "black";
+      selectedPiece = null;
+      legalMoves = [];
+      multiCapture = false;
+    }
+    
+    /*******************************
+     * Drawing Functions
+     *******************************/
+    function drawBoard() {
+      // Draw board squares
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          if ((r + c) % 2 === 0) {
+            ctx.fillStyle = "#F0D9B5";  // light square
+          } else {
+            ctx.fillStyle = "#B58863";  // dark square
+          }
+          ctx.fillRect(c * SQUARE_SIZE, r * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE);
+        }
+      }
+    }
+    
+    function drawPieces() {
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          const piece = board[r][c];
+          if (piece) {
+            // Draw piece circle
+            ctx.beginPath();
+            ctx.arc(
+              c * SQUARE_SIZE + SQUARE_SIZE/2,
+              r * SQUARE_SIZE + SQUARE_SIZE/2,
+              SQUARE_SIZE * 0.4,
+              0,
+              Math.PI * 2
+            );
+            ctx.fillStyle = piece.color;
+            ctx.fill();
+            ctx.strokeStyle = "#000";
+            ctx.stroke();
+            // If king, draw a crown mark
+            if (piece.king) {
+              ctx.fillStyle = "gold";
+              ctx.font = "bold " + (SQUARE_SIZE * 0.5) + "px sans-serif";
+              ctx.textAlign = "center";
+              ctx.textBaseline = "middle";
+              ctx.fillText("K", c * SQUARE_SIZE + SQUARE_SIZE/2, r * SQUARE_SIZE + SQUARE_SIZE/2);
+            }
+          }
+        }
+      }
+    }
+    
+    function highlightSquare(r, c, color = "yellow") {
+      ctx.fillStyle = color;
+      ctx.globalAlpha = 0.5;
+      ctx.fillRect(c * SQUARE_SIZE, r * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE);
+      ctx.globalAlpha = 1;
+    }
+    
+    function highlightLegalMoves() {
+      for (let move of legalMoves) {
+        // Draw a small circle on destination square center
+        const centerX = move.to.c * SQUARE_SIZE + SQUARE_SIZE/2;
+        const centerY = move.to.r * SQUARE_SIZE + SQUARE_SIZE/2;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, SQUARE_SIZE * 0.15, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(0,255,0,0.6)";
+        ctx.fill();
+      }
+    }
+    
+    function redraw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawBoard();
+      // If a piece is selected, highlight it
+      if (selectedPiece) {
+        highlightSquare(selectedPiece.r, selectedPiece.c, "cyan");
+      }
+      highlightLegalMoves();
+      drawPieces();
+      turnDisplay.textContent = "Turn: " + currentPlayer.charAt(0).toUpperCase() + currentPlayer.slice(1);
+    }
+    
+    /*******************************
+     * Move & Game Logic
+     *******************************/
+    // Directions for moves for non-king pieces:
+    const DIRECTIONS = {
+      black: [ { dr: 1, dc: -1 }, { dr: 1, dc: 1 } ],
+      red: [ { dr: -1, dc: -1 }, { dr: -1, dc: 1 } ]
+    };
+    // Kings can move in all four diagonals.
+    const KING_DIRECTIONS = [ { dr: 1, dc: -1 }, { dr: 1, dc: 1 }, { dr: -1, dc: -1 }, { dr: -1, dc: 1 } ];
+    
+    // Get legal moves for a piece at (r,c)
+    function getPieceMoves(r, c, boardState = board) {
+      const piece = boardState[r][c];
+      if (!piece) return [];
+      let moves = [];
+      const dirs = piece.king ? KING_DIRECTIONS : DIRECTIONS[piece.color];
+      
+      // First, look for captures.
+      for (let d of dirs) {
+        const midR = r + d.dr, midC = c + d.dc;
+        const endR = r + 2*d.dr, endC = c + 2*d.dc;
+        if (
+          endR >= 0 && endR < 8 && endC >= 0 && endC < 8 &&
+          midR >= 0 && midR < 8 && midC >= 0 && midC < 8
+        ) {
+          const midPiece = boardState[midR][midC];
+          if (midPiece && midPiece.color !== piece.color && boardState[endR][endC] === null) {
+            moves.push({ from: { r, c }, to: { r: endR, c: endC }, capture: { r: midR, c: midC } });
+          }
+        }
+      }
+      // If any capturing moves exist, return only them (force capture rule)
+      if (moves.length > 0) return moves;
+      
+      // Otherwise, check normal moves.
+      for (let d of dirs) {
+        const newR = r + d.dr, newC = c + d.dc;
+        if (newR >= 0 && newR < 8 && newC >= 0 && newC < 8 && boardState[newR][newC] === null) {
+          moves.push({ from: { r, c }, to: { r: newR, c: newC }, capture: null });
+        }
+      }
+      return moves;
+    }
+    
+    // Get all legal moves for the current player.
+    function getAllLegalMoves(color) {
+      let allMoves = [];
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          const piece = board[r][c];
+          if (piece && piece.color === color) {
+            let pieceMoves = getPieceMoves(r, c);
+            if (pieceMoves.length > 0) {
+              allMoves = allMoves.concat(pieceMoves);
+            }
+          }
+        }
+      }
+      // If any capturing moves exist among all pieces, only return those.
+      const captureMoves = allMoves.filter(m => m.capture);
+      return captureMoves.length > 0 ? captureMoves : allMoves;
+    }
+    
+    // Execute a move
+    function makeMove(move) {
+      const { from, to, capture } = move;
+      const piece = board[from.r][from.c];
+      board[to.r][to.c] = piece;
+      board[from.r][from.c] = null;
+      // If a capture move, remove the captured piece.
+      if (capture) {
+        board[capture.r][capture.c] = null;
+      }
+      // Check for king promotion: black becomes king at bottom row (row 7), red at top (row 0)
+      if (!piece.king) {
+        if (piece.color === "black" && to.r === 7) piece.king = true;
+        if (piece.color === "red" && to.r === 0) piece.king = true;
+      }
+    }
+    
+    // After a capture move, check if additional capture moves are available for the same piece.
+    function canContinueCapture(r, c) {
+      const moves = getPieceMoves(r, c);
+      return moves.some(m => m.capture);
+    }
+    
+    // Change turn to the other player.
+    function swapTurn() {
+      currentPlayer = (currentPlayer === "black") ? "red" : "black";
+    }
+    
+    // Check game over: if current player has no legal moves.
+    function checkGameOver() {
+      const moves = getAllLegalMoves(currentPlayer);
+      if (moves.length === 0) {
+        gameState = "game_over";
+        gameOverText.innerHTML = `Game Over!<br>${(currentPlayer === playerColor) ? "You lose!" : "You win!"}`;
+      }
+    }
+    
+    /*******************************
+     * Input Handling
+     *******************************/
+    canvas.addEventListener("mousedown", (e) => {
+      if (gameState !== "playing") return;
+      
+      // Only allow input if it is the human player's turn.
+      if (currentPlayer !== playerColor) return;
+      
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      const c = Math.floor(mx / SQUARE_SIZE);
+      const r = Math.floor(my / SQUARE_SIZE);
+      
+      // Ignore clicks on light (non-playable) squares.
+      if ((r + c) % 2 === 0) return;
+      
+      // If a piece is already selected, try to move.
+      if (selectedPiece) {
+        // Check if clicked square is one of the legal moves.
+        const move = legalMoves.find(m => m.to.r === r && m.to.c === c);
+        if (move) {
+          makeMove(move);
+          // If it was a capture and further capture moves are available, force multi-capture.
+          if (move.capture && canContinueCapture(r, c)) {
+            selectedPiece = { r, c };
+            legalMoves = getPieceMoves(r, c).filter(m => m.capture);
+            redraw();
+            return;
+          }
+          // Otherwise, finish move.
+          selectedPiece = null;
+          legalMoves = [];
+          swapTurn();
+          checkGameOver();
+          redraw();
+          return;
+        } else {
+          // Deselect if clicked elsewhere.
+          selectedPiece = null;
+          legalMoves = [];
+          redraw();
+          return;
+        }
+      } else {
+        // No piece selected yet; select if the clicked square has a piece of currentPlayer.
+        const piece = board[r][c];
+        if (piece && piece.color === currentPlayer) {
+          // If multi-capture is in progress, only allow the forced piece.
+          selectedPiece = { r, c };
+          legalMoves = getPieceMoves(r, c);
+          // If any capture move exists among all moves for current player, filter non-capturing moves.
+          const allMoves = getAllLegalMoves(currentPlayer);
+          if (allMoves.some(m => m.capture)) {
+            legalMoves = legalMoves.filter(m => m.capture);
+          }
+          redraw();
+        }
+      }
+    });
+    
+    // "Think For Me" button: let the AI choose a move for the current player.
+    thinkBtn.addEventListener("click", () => {
+      // Only allow if it's the human's turn.
+      if (gameState !== "playing" || currentPlayer !== playerColor) return;
+      const moves = getAllLegalMoves(currentPlayer);
+      if (moves.length === 0) return;
+      // For simplicity, choose a random move (or you could add heuristics here)
+      const move = moves[Math.floor(Math.random() * moves.length)];
+      // If a move is selected while a multi-capture is in progress,
+      // ensure it belongs to the forced piece.
+      if (selectedPiece && (move.from.r !== selectedPiece.r || move.from.c !== selectedPiece.c)) {
+        // If not, select the forced moves instead.
+        const forcedMoves = getPieceMoves(selectedPiece.r, selectedPiece.c).filter(m => m.capture);
+        if (forcedMoves.length) {
+          makeMove(forcedMoves[0]);
+          if (forcedMoves[0].capture && canContinueCapture(forcedMoves[0].to.r, forcedMoves[0].to.c)) {
+            selectedPiece = { r: forcedMoves[0].to.r, c: forcedMoves[0].to.c };
+            legalMoves = getPieceMoves(selectedPiece.r, selectedPiece.c).filter(m => m.capture);
+            redraw();
+            return;
+          }
+        }
+      } else {
+        // Otherwise, make the chosen move.
+        makeMove(move);
+        // Check for multi-capture
+        if (move.capture && canContinueCapture(move.to.r, move.to.c)) {
+          selectedPiece = { r: move.to.r, c: move.to.c };
+          legalMoves = getPieceMoves(selectedPiece.r, selectedPiece.c).filter(m => m.capture);
+          redraw();
+          return;
+        }
+      }
+      selectedPiece = null;
+      legalMoves = [];
+      swapTurn();
+      checkGameOver();
+      redraw();
+    });
+    
+    /*******************************
+     * Overlay & Menu Management
+     *******************************/
+    function hideAllScreens() {
+      menuScreen.style.display = "none";
+      colorScreen.style.display = "none";
+      instructionsScreen.style.display = "none";
+      gameOverScreen.style.display = "none";
+      bottomBar.style.display = "none";
+    }
+    
+    function showMenu() {
+      hideAllScreens();
+      gameState = "menu";
+      menuScreen.style.display = "flex";
+    }
+    
+    function showColorChoice() {
+      hideAllScreens();
+      gameState = "color_choice";
+      colorScreen.style.display = "flex";
+    }
+    
+    function showInstructions() {
+      hideAllScreens();
+      gameState = "instructions";
+      instructionsScreen.style.display = "flex";
+    }
+    
+    function startGame() {
+      hideAllScreens();
+      gameState = "playing";
+      initBoard();
+      bottomBar.style.display = "flex";
+      redraw();
+    }
+    
+    function showGameOver() {
+      hideAllScreens();
+      gameOverScreen.style.display = "flex";
+    }
+    
+    /*******************************
+     * Button & Keyboard Handlers
+     *******************************/
+    document.getElementById("newGameBtn").onclick = showColorChoice;
+    document.getElementById("instructionsBtn").onclick = showInstructions;
+    document.getElementById("blackSideBtn").onclick = () => {
+      playerColor = "black";
+      startGame();
+    };
+    document.getElementById("redSideBtn").onclick = () => {
+      playerColor = "red";
+      startGame();
+    };
+    document.getElementById("gameOverNewGameBtn").onclick = showColorChoice;
+    
+    // Keyboard shortcuts
+    document.addEventListener("keydown", (e) => {
+      const key = e.key.toLowerCase();
+      if (gameState === "color_choice") {
+        if (key === "b") document.getElementById("blackSideBtn").click();
+        if (key === "r") document.getElementById("redSideBtn").click();
+      } else if (gameState === "playing" || gameState === "instructions" || gameState === "game_over") {
+        if (key === "m") showMenu();
+      }
+    });
+    
+    /*******************************
+     * Main Loop (Redraw)
+     *******************************/
+    function mainLoop() {
+      if (gameState === "playing") {
+        redraw();
+      }
+      requestAnimationFrame(mainLoop);
+    }
+    
+    mainLoop();
+    showMenu();
+  </script>
+</body>
+</html>
