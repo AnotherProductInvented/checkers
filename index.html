@@ -132,7 +132,6 @@
   <!-- Bottom Bar with Turn Info & "Think For Me" Button -->
   <div id="bottomBar">
     <span id="turnDisplay">Turn: </span>
-    <button id="thinkBtn">Think For Me</button>
   </div>
   
   <!-- Logo -->
@@ -548,19 +547,6 @@
     canvas.addEventListener("pointerdown", handleCanvasInput);
     
     /************ "Think For Me" Button Handler ************/
-    thinkBtn.addEventListener("click", () => {
-      if (gameState !== "playing" || currentPlayer !== playerColor) return;
-      let moves = getAllLegalMoves(currentPlayer);
-      if (moves.length === 0) return;
-      let move = moves[Math.floor(Math.random() * moves.length)];
-      if (selectedPiece && (move.from.r !== selectedPiece.r || move.from.c !== selectedPiece.c)) {
-        const forcedMoves = getPieceMoves(selectedPiece.r, selectedPiece.c).filter(m => m.capture);
-        if (forcedMoves.length) {
-          makeMove(forcedMoves[0]);
-          if (forcedMoves[0].capture && canContinueCapture(forcedMoves[0].to.r, forcedMoves[0].to.c)) {
-            selectedPiece = { r: forcedMoves[0].to.r, c: forcedMoves[0].to.c };
-            legalMoves = getPieceMoves(selectedPiece.r, selectedPiece.c).filter(m => m.capture);
-            redraw();
             return;
           }
         }
