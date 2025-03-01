@@ -35,7 +35,7 @@
       border: 2px solid #333;
       touch-action: manipulation;
     }
-    /* Overlays for menus, instructions, color selection, game over */
+    /* Overlays */
     .overlayScreen {
       position: absolute;
       top: 0; left: 0; right: 0; bottom: 0;
@@ -55,7 +55,7 @@
       padding: 10px 20px;
       cursor: pointer;
     }
-    /* Bottom bar placed outside the board container */
+    /* Bottom bar placed below the board */
     #bottomBar {
       width: 720px;
       max-width: 100%;
@@ -79,33 +79,44 @@
   </style>
 </head>
 <body>
-  <!-- Header: Title split into two lines -->
+  <!-- Header: Two-line title -->
   <h1>Another Product Invented<br>Checkers</h1>
   
   <!-- Game Container -->
   <div id="gameContainer">
-    <!-- Overlays -->
+    <!-- Main Menu Overlay -->
     <div id="menuScreen" class="overlayScreen" style="display:flex;">
       <button id="newGameBtn">New Game</button>
       <button id="instructionsBtn">Instructions</button>
     </div>
+    <!-- Color Selection Overlay -->
     <div id="colorScreen" class="overlayScreen">
       <p>Choose Your Side:</p>
       <button id="blackSideBtn">Black [B]</button>
       <button id="redSideBtn">Red [R]</button>
       <p>You can also press B or R on your keyboard.</p>
     </div>
+    <!-- Difficulty Selection Overlay -->
+    <div id="difficultyScreen" class="overlayScreen">
+      <p>Select Difficulty:</p>
+      <button id="easyBtn">Easy [E]</button>
+      <button id="mediumBtn">Medium [M]</button>
+      <button id="hardBtn">Hard [H]</button>
+      <p>You can also press E, M, or H on your keyboard.</p>
+    </div>
+    <!-- Instructions Overlay -->
     <div id="instructionsScreen" class="overlayScreen">
       <h2>How to Play Checkers</h2>
       <p>
         Standard checkers is played on an 8×8 board (only dark squares are used).<br>
-        Black goes first.<br>
+        Black moves first.<br>
         Each player’s pieces move diagonally forward.<br>
         Capture an opponent’s piece by jumping over it – if a capture is available, you must take it.<br>
         When a piece reaches the far side, it is crowned as a king and only then is allowed to move backwards, too.
       </p>
       <p>Press [M] to return to the Main Menu.</p>
     </div>
+    <!-- Game Over Overlay -->
     <div id="gameOverScreen" class="overlayScreen">
       <h2 id="gameOverText"></h2>
       <button id="gameOverNewGameBtn">New Game</button>
@@ -116,7 +127,7 @@
     <canvas id="checkersCanvas" width="720" height="720"></canvas>
   </div>
   
-  <!-- Bottom bar: displays turn and "Think For Me" button (placed below the board) -->
+  <!-- Bottom bar: displays turn and "Think For Me" button -->
   <div id="bottomBar">
     <span id="turnDisplay">Turn: </span>
     <button id="thinkBtn">Think For Me</button>
@@ -133,6 +144,7 @@
     const ctx = canvas.getContext("2d");
     const menuScreen = document.getElementById("menuScreen");
     const colorScreen = document.getElementById("colorScreen");
+    const difficultyScreen = document.getElementById("difficultyScreen");
     const instructionsScreen = document.getElementById("instructionsScreen");
     const gameOverScreen = document.getElementById("gameOverScreen");
     const gameOverText = document.getElementById("gameOverText");
@@ -140,9 +152,10 @@
     const turnDisplay = document.getElementById("turnDisplay");
     const thinkBtn = document.getElementById("thinkBtn");
     
-    let gameState = "menu"; // "menu", "color_choice", "playing", "instructions", "game_over"
+    let gameState = "menu"; // "menu", "color_choice", "difficulty_choice", "playing", "instructions", "game_over"
     let playerColor = null; // "black" or "red" chosen by player
-    let currentPlayer = "black"; // Black always goes first
+    let difficulty = "easy"; // default difficulty ("easy", "medium", or "hard")
+    let currentPlayer = "black"; // Black always moves first
     let board = [];
     let selectedPiece = null; // { r, c } in board coordinates
     let legalMoves = []; // available moves for the selected piece
@@ -154,7 +167,9 @@
     /*******************************
      * Board Orientation Helpers
      *******************************/
-    // For a chess-like flip: if the player chooses black, flip the board so that black pieces appear at the bottom.
+    // Our initial board is set with black pieces in rows 0-2 and red pieces in rows 5-7.
+    // We want the human player's pieces to appear at the bottom.
+    // So if the player chooses black, we flip the board.
     function boardToScreen(r, c) {
       if (playerColor === "black") {
         return { sr: 7 - r, sc: 7 - c };
@@ -179,7 +194,7 @@
           board[r][c] = null;
         }
       }
-      // Always initialize with black pieces on rows 0,1,2 and red on rows 5,6,7.
+      // Initialize with black pieces on rows 0-2 and red pieces on rows 5-7.
       for (let r = 0; r < 3; r++) {
         for (let c = 0; c < 8; c++) {
           if ((r + c) % 2 === 1) {
@@ -194,7 +209,7 @@
           }
         }
       }
-      currentPlayer = "black";
+      currentPlayer = "black"; // Black always moves first.
       selectedPiece = null;
       legalMoves = [];
       multiCapture = false;
@@ -287,41 +302,41 @@
     };
     const KING_DIRECTIONS = [ { dr: 1, dc: -1 }, { dr: 1, dc: 1 }, { dr: -1, dc: -1 }, { dr: -1, dc: 1 } ];
     
-    function getPieceMoves(r, c, boardState = board) {
-      const piece = boardState[r][c];
+    function getPieceMoves(r, c, bd = board) {
+      const piece = bd[r][c];
       if (!piece) return [];
       let moves = [];
       const dirs = piece.king ? KING_DIRECTIONS : DIRECTIONS[piece.color];
-      // Look for captures first.
+      // Look for capture moves.
       for (let d of dirs) {
         const midR = r + d.dr, midC = c + d.dc;
         const endR = r + 2 * d.dr, endC = c + 2 * d.dc;
         if (endR >= 0 && endR < 8 && endC >= 0 && endC < 8 &&
             midR >= 0 && midR < 8 && midC >= 0 && midC < 8) {
-          const midPiece = boardState[midR][midC];
-          if (midPiece && midPiece.color !== piece.color && boardState[endR][endC] === null) {
+          const midPiece = bd[midR][midC];
+          if (midPiece && midPiece.color !== piece.color && bd[endR][endC] === null) {
             moves.push({ from: { r, c }, to: { r: endR, c: endC }, capture: { r: midR, c: midC } });
           }
         }
       }
       if (moves.length > 0) return moves;
-      
+      // Otherwise, check normal moves.
       for (let d of dirs) {
         const newR = r + d.dr, newC = c + d.dc;
-        if (newR >= 0 && newR < 8 && newC >= 0 && newC < 8 && boardState[newR][newC] === null) {
+        if (newR >= 0 && newR < 8 && newC >= 0 && newC < 8 && bd[newR][newC] === null) {
           moves.push({ from: { r, c }, to: { r: newR, c: newC }, capture: null });
         }
       }
       return moves;
     }
     
-    function getAllLegalMoves(color) {
+    function getAllLegalMoves(color, bd = board) {
       let allMoves = [];
       for (let r = 0; r < 8; r++) {
         for (let c = 0; c < 8; c++) {
-          const piece = board[r][c];
+          const piece = bd[r][c];
           if (piece && piece.color === color) {
-            let pieceMoves = getPieceMoves(r, c);
+            let pieceMoves = getPieceMoves(r, c, bd);
             if (pieceMoves.length > 0) {
               allMoves = allMoves.concat(pieceMoves);
             }
@@ -365,6 +380,128 @@
     }
     
     /*******************************
+     * AI Move Selection Functions
+     *******************************/
+    // Deep-clone the board.
+    function cloneBoard(bd) {
+      return JSON.parse(JSON.stringify(bd));
+    }
+    // Simulate a move on a cloned board.
+    function simulateMove(bd, move) {
+      let newBoard = cloneBoard(bd);
+      let piece = newBoard[move.from.r][move.from.c];
+      newBoard[move.to.r][move.to.c] = piece;
+      newBoard[move.from.r][move.from.c] = null;
+      if (move.capture) {
+        newBoard[move.capture.r][move.capture.c] = null;
+      }
+      if (piece && !piece.king) {
+        if (piece.color === "black" && move.to.r === 7) piece.king = true;
+        if (piece.color === "red" && move.to.r === 0) piece.king = true;
+      }
+      return newBoard;
+    }
+    // Evaluate board: simple heuristic (normal piece = 1, king = 1.5)
+    function evaluateBoard(bd, color) {
+      let score = 0;
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          let piece = bd[r][c];
+          if (piece) {
+            let value = piece.king ? 1.5 : 1;
+            score += (piece.color === color) ? value : -value;
+          }
+        }
+      }
+      return score;
+    }
+    // A simple minimax (depth 2) for hard difficulty.
+    function minimax(bd, depth, maximizing, player) {
+      if (depth === 0) {
+        return evaluateBoard(bd, player);
+      }
+      let moves = getAllLegalMoves(maximizing ? player : (player === "black" ? "red" : "black"), bd);
+      if (maximizing) {
+        let maxEval = -Infinity;
+        for (let move of moves) {
+          let newBd = simulateMove(bd, move);
+          let evalScore = minimax(newBd, depth - 1, false, player);
+          maxEval = Math.max(maxEval, evalScore);
+        }
+        return maxEval;
+      } else {
+        let minEval = Infinity;
+        for (let move of moves) {
+          let newBd = simulateMove(bd, move);
+          let evalScore = minimax(newBd, depth - 1, true, player);
+          minEval = Math.min(minEval, evalScore);
+        }
+        return minEval;
+      }
+    }
+    // Choose AI move based on selected difficulty.
+    function getAiMove() {
+      let moves = getAllLegalMoves(currentPlayer);
+      if (moves.length === 0) return null;
+      if (difficulty === "easy") {
+        return moves[Math.floor(Math.random() * moves.length)];
+      } else if (difficulty === "medium") {
+        let bestScore = -Infinity;
+        let bestMove = null;
+        for (let move of moves) {
+          let simBoard = simulateMove(board, move);
+          let score = evaluateBoard(simBoard, currentPlayer);
+          if (score > bestScore) {
+            bestScore = score;
+            bestMove = move;
+          }
+        }
+        return bestMove || moves[Math.floor(Math.random() * moves.length)];
+      } else if (difficulty === "hard") {
+        let bestScore = -Infinity;
+        let bestMove = null;
+        for (let move of moves) {
+          let simBoard = simulateMove(board, move);
+          let score = minimax(simBoard, 2, false, currentPlayer);
+          if (score > bestScore) {
+            bestScore = score;
+            bestMove = move;
+          }
+        }
+        return bestMove || moves[Math.floor(Math.random() * moves.length)];
+      } else {
+        return moves[Math.floor(Math.random() * moves.length)];
+      }
+    }
+    
+    /*******************************
+     * AI Turn Handling
+     *******************************/
+    function aiTurn() {
+      if (aiThinking) return;
+      aiThinking = true;
+      setTimeout(() => {
+        let move = getAiMove();
+        if (move) {
+          makeMove(move);
+          if (move.capture && canContinueCapture(move.to.r, move.to.c)) {
+            selectedPiece = { r: move.to.r, c: move.to.c };
+            legalMoves = getPieceMoves(move.to.r, move.to.c).filter(m => m.capture);
+            aiThinking = false;
+            redraw();
+            return;
+          }
+        }
+        selectedPiece = null;
+        legalMoves = [];
+        swapTurn();
+        checkGameOver();
+        aiThinking = false;
+        redraw();
+      }, 1000);
+    }
+    
+    /*******************************
      * Input Handling (Mouse & Touch)
      *******************************/
     function processInput(mx, my) {
@@ -373,7 +510,7 @@
       const sr = Math.floor(my / SQUARE_SIZE);
       const sc = Math.floor(mx / SQUARE_SIZE);
       const { r, c } = screenToBoard(sr, sc);
-      if ((r + c) % 2 === 0) return; // ignore non-playable squares
+      if ((r + c) % 2 === 0) return; // only dark squares playable
       
       if (selectedPiece) {
         const move = legalMoves.find(m => m.to.r === r && m.to.c === c);
@@ -427,58 +564,13 @@
     }, { passive: false });
     
     /*******************************
-     * AI Turn Handling
-     *******************************/
-    function aiTurn() {
-      if (aiThinking) return;
-      aiThinking = true;
-      setTimeout(() => {
-        const moves = getAllLegalMoves(currentPlayer);
-        if (moves.length === 0) {
-          aiThinking = false;
-          return;
-        }
-        const move = moves[Math.floor(Math.random() * moves.length)];
-        // If multi-capture is in progress, force moves from the selected piece.
-        if (selectedPiece && (move.from.r !== selectedPiece.r || move.from.c !== selectedPiece.c)) {
-          const forcedMoves = getPieceMoves(selectedPiece.r, selectedPiece.c).filter(m => m.capture);
-          if (forcedMoves.length) {
-            makeMove(forcedMoves[0]);
-            if (forcedMoves[0].capture && canContinueCapture(forcedMoves[0].to.r, forcedMoves[0].to.c)) {
-              selectedPiece = { r: forcedMoves[0].to.r, c: forcedMoves[0].to.c };
-              legalMoves = getPieceMoves(selectedPiece.r, selectedPiece.c).filter(m => m.capture);
-              aiThinking = false;
-              redraw();
-              return;
-            }
-          }
-        } else {
-          makeMove(move);
-          if (move.capture && canContinueCapture(move.to.r, move.to.c)) {
-            selectedPiece = { r: move.to.r, c: move.to.c };
-            legalMoves = getPieceMoves(selectedPiece.r, selectedPiece.c).filter(m => m.capture);
-            aiThinking = false;
-            redraw();
-            return;
-          }
-        }
-        selectedPiece = null;
-        legalMoves = [];
-        swapTurn();
-        checkGameOver();
-        aiThinking = false;
-        redraw();
-      }, 1000);
-    }
-    
-    /*******************************
      * "Think For Me" Button Handler
      *******************************/
     thinkBtn.addEventListener("click", () => {
       if (gameState !== "playing" || currentPlayer !== playerColor) return;
-      const moves = getAllLegalMoves(currentPlayer);
+      let moves = getAllLegalMoves(currentPlayer);
       if (moves.length === 0) return;
-      const move = moves[Math.floor(Math.random() * moves.length)];
+      let move = moves[Math.floor(Math.random() * moves.length)];
       if (selectedPiece && (move.from.r !== selectedPiece.r || move.from.c !== selectedPiece.c)) {
         const forcedMoves = getPieceMoves(selectedPiece.r, selectedPiece.c).filter(m => m.capture);
         if (forcedMoves.length) {
@@ -512,6 +604,7 @@
     function hideAllScreens() {
       menuScreen.style.display = "none";
       colorScreen.style.display = "none";
+      difficultyScreen.style.display = "none";
       instructionsScreen.style.display = "none";
       gameOverScreen.style.display = "none";
       bottomBar.style.display = "none";
@@ -527,6 +620,12 @@
       hideAllScreens();
       gameState = "color_choice";
       colorScreen.style.display = "flex";
+    }
+    
+    function showDifficultyChoice() {
+      hideAllScreens();
+      gameState = "difficulty_choice";
+      difficultyScreen.style.display = "flex";
     }
     
     function showInstructions() {
@@ -558,10 +657,22 @@
     document.getElementById("instructionsBtn").onclick = showInstructions;
     document.getElementById("blackSideBtn").onclick = () => {
       playerColor = "black";
-      startGame();
+      showDifficultyChoice();
     };
     document.getElementById("redSideBtn").onclick = () => {
       playerColor = "red";
+      showDifficultyChoice();
+    };
+    document.getElementById("easyBtn").onclick = () => {
+      difficulty = "easy";
+      startGame();
+    };
+    document.getElementById("mediumBtn").onclick = () => {
+      difficulty = "medium";
+      startGame();
+    };
+    document.getElementById("hardBtn").onclick = () => {
+      difficulty = "hard";
       startGame();
     };
     document.getElementById("gameOverNewGameBtn").onclick = showColorChoice;
@@ -571,6 +682,10 @@
       if (gameState === "color_choice") {
         if (key === "b") document.getElementById("blackSideBtn").click();
         if (key === "r") document.getElementById("redSideBtn").click();
+      } else if (gameState === "difficulty_choice") {
+        if (key === "e") document.getElementById("easyBtn").click();
+        if (key === "m") document.getElementById("mediumBtn").click();
+        if (key === "h") document.getElementById("hardBtn").click();
       } else if (["playing", "instructions", "game_over"].includes(gameState)) {
         if (key === "m") showMenu();
       }
