@@ -139,16 +139,15 @@
     /*******************************
      * Board Orientation Helpers
      *******************************/
-    // Convert board coordinates (r, c) to screen coordinates (sr, sc)
+    // For a chess-like flip: if the player is black, we flip the board so that black pieces appear at the bottom.
     function boardToScreen(r, c) {
-      if (playerColor === "red") {
+      if (playerColor === "black") {
         return { sr: 7 - r, sc: 7 - c };
       }
       return { sr: r, sc: c };
     }
-    // Inverse conversion: from screen to board coordinates
     function screenToBoard(sr, sc) {
-      if (playerColor === "red") {
+      if (playerColor === "black") {
         return { r: 7 - sr, c: 7 - sc };
       }
       return { r: sr, c: sc };
@@ -215,8 +214,8 @@
             // Draw piece circle
             ctx.beginPath();
             ctx.arc(
-              sc * SQUARE_SIZE + SQUARE_SIZE/2,
-              sr * SQUARE_SIZE + SQUARE_SIZE/2,
+              sc * SQUARE_SIZE + SQUARE_SIZE / 2,
+              sr * SQUARE_SIZE + SQUARE_SIZE / 2,
               SQUARE_SIZE * 0.4,
               0,
               Math.PI * 2
@@ -231,7 +230,7 @@
               ctx.font = "bold " + (SQUARE_SIZE * 0.5) + "px sans-serif";
               ctx.textAlign = "center";
               ctx.textBaseline = "middle";
-              ctx.fillText("K", sc * SQUARE_SIZE + SQUARE_SIZE/2, sr * SQUARE_SIZE + SQUARE_SIZE/2);
+              ctx.fillText("K", sc * SQUARE_SIZE + SQUARE_SIZE / 2, sr * SQUARE_SIZE + SQUARE_SIZE / 2);
             }
           }
         }
@@ -248,12 +247,11 @@
     
     function highlightLegalMoves() {
       for (let move of legalMoves) {
-        // Use boardToScreen to highlight destination squares
         let { sr, sc } = boardToScreen(move.to.r, move.to.c);
         ctx.beginPath();
         ctx.arc(
-          sc * SQUARE_SIZE + SQUARE_SIZE/2,
-          sr * SQUARE_SIZE + SQUARE_SIZE/2,
+          sc * SQUARE_SIZE + SQUARE_SIZE / 2,
+          sr * SQUARE_SIZE + SQUARE_SIZE / 2,
           SQUARE_SIZE * 0.15,
           0,
           Math.PI * 2
@@ -266,7 +264,6 @@
     function redraw() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       drawBoard();
-      // If a piece is selected, highlight it
       if (selectedPiece) {
         highlightSquare(selectedPiece.r, selectedPiece.c, "cyan");
       }
@@ -278,12 +275,12 @@
     /*******************************
      * Move & Game Logic
      *******************************/
-    // Directions for moves for non-king pieces:
+    // Directions for non-king pieces
     const DIRECTIONS = {
       black: [ { dr: 1, dc: -1 }, { dr: 1, dc: 1 } ],
       red: [ { dr: -1, dc: -1 }, { dr: -1, dc: 1 } ]
     };
-    // Kings can move in all four diagonals.
+    // Kings move in all four diagonals.
     const KING_DIRECTIONS = [ { dr: 1, dc: -1 }, { dr: 1, dc: 1 }, { dr: -1, dc: -1 }, { dr: -1, dc: 1 } ];
     
     // Get legal moves for a piece at board position (r, c)
@@ -293,7 +290,7 @@
       let moves = [];
       const dirs = piece.king ? KING_DIRECTIONS : DIRECTIONS[piece.color];
       
-      // First, look for captures.
+      // Look for captures first.
       for (let d of dirs) {
         const midR = r + d.dr, midC = c + d.dc;
         const endR = r + 2 * d.dr, endC = c + 2 * d.dc;
@@ -307,7 +304,7 @@
           }
         }
       }
-      // If any capturing moves exist, return only them (force capture rule)
+      // If capturing moves exist, force capture.
       if (moves.length > 0) return moves;
       
       // Otherwise, check normal moves.
@@ -334,7 +331,7 @@
           }
         }
       }
-      // If any capturing moves exist among all pieces, only return those.
+      // If any capture moves exist, force them.
       const captureMoves = allMoves.filter(m => m.capture);
       return captureMoves.length > 0 ? captureMoves : allMoves;
     }
@@ -345,29 +342,28 @@
       const piece = board[from.r][from.c];
       board[to.r][to.c] = piece;
       board[from.r][from.c] = null;
-      // If a capture move, remove the captured piece.
       if (capture) {
         board[capture.r][capture.c] = null;
       }
-      // Check for king promotion: black becomes king at bottom (row 7), red at top (row 0)
+      // King promotion: black becomes king at row 7, red at row 0.
       if (!piece.king) {
         if (piece.color === "black" && to.r === 7) piece.king = true;
         if (piece.color === "red" && to.r === 0) piece.king = true;
       }
     }
     
-    // After a capture move, check if additional capture moves are available for the same piece.
+    // After a capture, check if further capture moves are available.
     function canContinueCapture(r, c) {
       const moves = getPieceMoves(r, c);
       return moves.some(m => m.capture);
     }
     
-    // Change turn to the other player.
+    // Switch turns.
     function swapTurn() {
       currentPlayer = (currentPlayer === "black") ? "red" : "black";
     }
     
-    // Check game over: if the current player has no legal moves.
+    // Check for game over (if current player has no moves).
     function checkGameOver() {
       const moves = getAllLegalMoves(currentPlayer);
       if (moves.length === 0) {
@@ -382,28 +378,23 @@
      *******************************/
     canvas.addEventListener("mousedown", (e) => {
       if (gameState !== "playing") return;
-      
-      // Only allow input if it is the human player's turn.
       if (currentPlayer !== playerColor) return;
       
       const rect = canvas.getBoundingClientRect();
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;
-      // Compute screen coordinates (sr, sc)
       const sr = Math.floor(my / SQUARE_SIZE);
       const sc = Math.floor(mx / SQUARE_SIZE);
-      // Convert to board coordinates
       const { r, c } = screenToBoard(sr, sc);
       
-      // Ignore clicks on light (non-playable) squares.
+      // Only consider dark (playable) squares.
       if ((r + c) % 2 === 0) return;
       
-      // If a piece is already selected, try to move.
       if (selectedPiece) {
         const move = legalMoves.find(m => m.to.r === r && m.to.c === c);
         if (move) {
           makeMove(move);
-          // If it was a capture and further capture moves are available, force multi-capture.
+          // For capture moves, if further captures are available, force multi-capture.
           if (move.capture && canContinueCapture(r, c)) {
             selectedPiece = { r, c };
             legalMoves = getPieceMoves(r, c).filter(m => m.capture);
@@ -417,19 +408,16 @@
           redraw();
           return;
         } else {
-          // Deselect if clicked elsewhere.
           selectedPiece = null;
           legalMoves = [];
           redraw();
           return;
         }
       } else {
-        // No piece selected; select if the clicked square has a piece of currentPlayer.
         const piece = board[r][c];
         if (piece && piece.color === currentPlayer) {
           selectedPiece = { r, c };
           legalMoves = getPieceMoves(r, c);
-          // If any capture move exists among all moves for current player, filter non-capturing moves.
           const allMoves = getAllLegalMoves(currentPlayer);
           if (allMoves.some(m => m.capture)) {
             legalMoves = legalMoves.filter(m => m.capture);
@@ -439,14 +427,13 @@
       }
     });
     
-    // "Think For Me" button: let the AI choose a move for the current player.
+    // "Think For Me" button – makes a move for you.
     thinkBtn.addEventListener("click", () => {
       if (gameState !== "playing" || currentPlayer !== playerColor) return;
       const moves = getAllLegalMoves(currentPlayer);
       if (moves.length === 0) return;
-      // Choose a random move (you can enhance this with heuristics)
       const move = moves[Math.floor(Math.random() * moves.length)];
-      // If multi-capture is in progress, ensure move comes from the forced piece.
+      // In multi-capture scenarios, force moves from the selected piece.
       if (selectedPiece && (move.from.r !== selectedPiece.r || move.from.c !== selectedPiece.c)) {
         const forcedMoves = getPieceMoves(selectedPiece.r, selectedPiece.c).filter(m => m.capture);
         if (forcedMoves.length) {
