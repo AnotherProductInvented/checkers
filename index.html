@@ -23,7 +23,7 @@
       position: relative;
       width: 720px;
       max-width: 100%;
-      margin-bottom: 60px;
+      margin-bottom: 10px;
     }
     canvas {
       display: block;
@@ -52,21 +52,18 @@
       padding: 10px 20px;
       cursor: pointer;
     }
-    /* Bottom bar visible during play */
+    /* Bottom bar placed outside the board container */
     #bottomBar {
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      width: 100%;
-      height: 50px;
+      width: 720px;
+      max-width: 100%;
       background: #fff;
       border-top: 1px solid #ccc;
       display: none;
       align-items: center;
       justify-content: space-between;
-      padding: 0 10px;
+      padding: 10px;
       box-sizing: border-box;
-      z-index: 5;
+      margin-top: 5px;
     }
   </style>
 </head>
@@ -90,10 +87,11 @@
     <div id="instructionsScreen" class="overlayScreen">
       <h2>How to Play Checkers</h2>
       <p>
-        Standard checkers is played on an 8×8 board. Only dark squares are used.
+        Standard checkers is played on an 8×8 board (only dark squares are used).
         Each player’s pieces move diagonally forward.
-        Capture an opponent’s piece by jumping over it. If a capture is available, you must take it.
-        When a piece reaches the far side, it is crowned as a king and may move backwards.
+        Capture an opponent’s piece by jumping over it.
+        If a capture is available, you must take it.
+        When a piece reaches the far side, it is crowned as a king and only then is allowed to move backwards, too.
       </p>
       <p>Press [M] to return to the Main Menu.</p>
     </div>
@@ -105,12 +103,12 @@
     
     <!-- The game canvas -->
     <canvas id="checkersCanvas" width="720" height="720"></canvas>
-    
-    <!-- Bottom bar: displays turn and "Think For Me" button -->
-    <div id="bottomBar">
-      <span id="turnDisplay">Turn: </span>
-      <button id="thinkBtn">Think For Me</button>
-    </div>
+  </div>
+  
+  <!-- Bottom bar: displays turn and "Think For Me" button (placed below the board) -->
+  <div id="bottomBar">
+    <span id="turnDisplay">Turn: </span>
+    <button id="thinkBtn">Think For Me</button>
   </div>
   
   <script>
@@ -130,13 +128,31 @@
     
     let gameState = "menu"; // "menu", "color_choice", "playing", "instructions", "game_over"
     let playerColor = null; // "black" or "red" chosen by player
-    let currentPlayer = "black"; // Black always starts
+    let currentPlayer = "black"; // Black always starts in the game logic
     let board = [];
-    let selectedPiece = null; // { r, c }
-    let legalMoves = []; // array of move objects for the selected piece
+    let selectedPiece = null; // { r, c } in board coordinates
+    let legalMoves = []; // available moves for the selected piece
     let multiCapture = false; // indicates if a multi-capture is in progress
 
     const SQUARE_SIZE = canvas.width / 8;
+    
+    /*******************************
+     * Board Orientation Helpers
+     *******************************/
+    // Convert board coordinates (r, c) to screen coordinates (sr, sc)
+    function boardToScreen(r, c) {
+      if (playerColor === "red") {
+        return { sr: 7 - r, sc: 7 - c };
+      }
+      return { sr: r, sc: c };
+    }
+    // Inverse conversion: from screen to board coordinates
+    function screenToBoard(sr, sc) {
+      if (playerColor === "red") {
+        return { r: 7 - sr, c: 7 - sc };
+      }
+      return { r: sr, c: sc };
+    }
     
     /*******************************
      * Board Initialization
@@ -176,15 +192,16 @@
      * Drawing Functions
      *******************************/
     function drawBoard() {
-      // Draw board squares
+      // Draw board squares using board-to-screen conversion
       for (let r = 0; r < 8; r++) {
         for (let c = 0; c < 8; c++) {
+          let { sr, sc } = boardToScreen(r, c);
           if ((r + c) % 2 === 0) {
             ctx.fillStyle = "#F0D9B5";  // light square
           } else {
             ctx.fillStyle = "#B58863";  // dark square
           }
-          ctx.fillRect(c * SQUARE_SIZE, r * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE);
+          ctx.fillRect(sc * SQUARE_SIZE, sr * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE);
         }
       }
     }
@@ -194,11 +211,12 @@
         for (let c = 0; c < 8; c++) {
           const piece = board[r][c];
           if (piece) {
+            const { sr, sc } = boardToScreen(r, c);
             // Draw piece circle
             ctx.beginPath();
             ctx.arc(
-              c * SQUARE_SIZE + SQUARE_SIZE/2,
-              r * SQUARE_SIZE + SQUARE_SIZE/2,
+              sc * SQUARE_SIZE + SQUARE_SIZE/2,
+              sr * SQUARE_SIZE + SQUARE_SIZE/2,
               SQUARE_SIZE * 0.4,
               0,
               Math.PI * 2
@@ -213,7 +231,7 @@
               ctx.font = "bold " + (SQUARE_SIZE * 0.5) + "px sans-serif";
               ctx.textAlign = "center";
               ctx.textBaseline = "middle";
-              ctx.fillText("K", c * SQUARE_SIZE + SQUARE_SIZE/2, r * SQUARE_SIZE + SQUARE_SIZE/2);
+              ctx.fillText("K", sc * SQUARE_SIZE + SQUARE_SIZE/2, sr * SQUARE_SIZE + SQUARE_SIZE/2);
             }
           }
         }
@@ -221,19 +239,25 @@
     }
     
     function highlightSquare(r, c, color = "yellow") {
+      let { sr, sc } = boardToScreen(r, c);
       ctx.fillStyle = color;
       ctx.globalAlpha = 0.5;
-      ctx.fillRect(c * SQUARE_SIZE, r * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE);
+      ctx.fillRect(sc * SQUARE_SIZE, sr * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE);
       ctx.globalAlpha = 1;
     }
     
     function highlightLegalMoves() {
       for (let move of legalMoves) {
-        // Draw a small circle on destination square center
-        const centerX = move.to.c * SQUARE_SIZE + SQUARE_SIZE/2;
-        const centerY = move.to.r * SQUARE_SIZE + SQUARE_SIZE/2;
+        // Use boardToScreen to highlight destination squares
+        let { sr, sc } = boardToScreen(move.to.r, move.to.c);
         ctx.beginPath();
-        ctx.arc(centerX, centerY, SQUARE_SIZE * 0.15, 0, Math.PI * 2);
+        ctx.arc(
+          sc * SQUARE_SIZE + SQUARE_SIZE/2,
+          sr * SQUARE_SIZE + SQUARE_SIZE/2,
+          SQUARE_SIZE * 0.15,
+          0,
+          Math.PI * 2
+        );
         ctx.fillStyle = "rgba(0,255,0,0.6)";
         ctx.fill();
       }
@@ -262,7 +286,7 @@
     // Kings can move in all four diagonals.
     const KING_DIRECTIONS = [ { dr: 1, dc: -1 }, { dr: 1, dc: 1 }, { dr: -1, dc: -1 }, { dr: -1, dc: 1 } ];
     
-    // Get legal moves for a piece at (r,c)
+    // Get legal moves for a piece at board position (r, c)
     function getPieceMoves(r, c, boardState = board) {
       const piece = boardState[r][c];
       if (!piece) return [];
@@ -272,7 +296,7 @@
       // First, look for captures.
       for (let d of dirs) {
         const midR = r + d.dr, midC = c + d.dc;
-        const endR = r + 2*d.dr, endC = c + 2*d.dc;
+        const endR = r + 2 * d.dr, endC = c + 2 * d.dc;
         if (
           endR >= 0 && endR < 8 && endC >= 0 && endC < 8 &&
           midR >= 0 && midR < 8 && midC >= 0 && midC < 8
@@ -315,7 +339,7 @@
       return captureMoves.length > 0 ? captureMoves : allMoves;
     }
     
-    // Execute a move
+    // Execute a move.
     function makeMove(move) {
       const { from, to, capture } = move;
       const piece = board[from.r][from.c];
@@ -325,7 +349,7 @@
       if (capture) {
         board[capture.r][capture.c] = null;
       }
-      // Check for king promotion: black becomes king at bottom row (row 7), red at top (row 0)
+      // Check for king promotion: black becomes king at bottom (row 7), red at top (row 0)
       if (!piece.king) {
         if (piece.color === "black" && to.r === 7) piece.king = true;
         if (piece.color === "red" && to.r === 0) piece.king = true;
@@ -343,12 +367,13 @@
       currentPlayer = (currentPlayer === "black") ? "red" : "black";
     }
     
-    // Check game over: if current player has no legal moves.
+    // Check game over: if the current player has no legal moves.
     function checkGameOver() {
       const moves = getAllLegalMoves(currentPlayer);
       if (moves.length === 0) {
         gameState = "game_over";
         gameOverText.innerHTML = `Game Over!<br>${(currentPlayer === playerColor) ? "You lose!" : "You win!"}`;
+        showGameOver();
       }
     }
     
@@ -364,15 +389,17 @@
       const rect = canvas.getBoundingClientRect();
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;
-      const c = Math.floor(mx / SQUARE_SIZE);
-      const r = Math.floor(my / SQUARE_SIZE);
+      // Compute screen coordinates (sr, sc)
+      const sr = Math.floor(my / SQUARE_SIZE);
+      const sc = Math.floor(mx / SQUARE_SIZE);
+      // Convert to board coordinates
+      const { r, c } = screenToBoard(sr, sc);
       
       // Ignore clicks on light (non-playable) squares.
       if ((r + c) % 2 === 0) return;
       
       // If a piece is already selected, try to move.
       if (selectedPiece) {
-        // Check if clicked square is one of the legal moves.
         const move = legalMoves.find(m => m.to.r === r && m.to.c === c);
         if (move) {
           makeMove(move);
@@ -383,7 +410,6 @@
             redraw();
             return;
           }
-          // Otherwise, finish move.
           selectedPiece = null;
           legalMoves = [];
           swapTurn();
@@ -398,10 +424,9 @@
           return;
         }
       } else {
-        // No piece selected yet; select if the clicked square has a piece of currentPlayer.
+        // No piece selected; select if the clicked square has a piece of currentPlayer.
         const piece = board[r][c];
         if (piece && piece.color === currentPlayer) {
-          // If multi-capture is in progress, only allow the forced piece.
           selectedPiece = { r, c };
           legalMoves = getPieceMoves(r, c);
           // If any capture move exists among all moves for current player, filter non-capturing moves.
@@ -416,16 +441,13 @@
     
     // "Think For Me" button: let the AI choose a move for the current player.
     thinkBtn.addEventListener("click", () => {
-      // Only allow if it's the human's turn.
       if (gameState !== "playing" || currentPlayer !== playerColor) return;
       const moves = getAllLegalMoves(currentPlayer);
       if (moves.length === 0) return;
-      // For simplicity, choose a random move (or you could add heuristics here)
+      // Choose a random move (you can enhance this with heuristics)
       const move = moves[Math.floor(Math.random() * moves.length)];
-      // If a move is selected while a multi-capture is in progress,
-      // ensure it belongs to the forced piece.
+      // If multi-capture is in progress, ensure move comes from the forced piece.
       if (selectedPiece && (move.from.r !== selectedPiece.r || move.from.c !== selectedPiece.c)) {
-        // If not, select the forced moves instead.
         const forcedMoves = getPieceMoves(selectedPiece.r, selectedPiece.c).filter(m => m.capture);
         if (forcedMoves.length) {
           makeMove(forcedMoves[0]);
@@ -437,9 +459,7 @@
           }
         }
       } else {
-        // Otherwise, make the chosen move.
         makeMove(move);
-        // Check for multi-capture
         if (move.capture && canContinueCapture(move.to.r, move.to.c)) {
           selectedPiece = { r: move.to.r, c: move.to.c };
           legalMoves = getPieceMoves(selectedPiece.r, selectedPiece.c).filter(m => m.capture);
@@ -517,7 +537,7 @@
       if (gameState === "color_choice") {
         if (key === "b") document.getElementById("blackSideBtn").click();
         if (key === "r") document.getElementById("redSideBtn").click();
-      } else if (gameState === "playing" || gameState === "instructions" || gameState === "game_over") {
+      } else if (["playing", "instructions", "game_over"].includes(gameState)) {
         if (key === "m") showMenu();
       }
     });
