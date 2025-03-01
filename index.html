@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>Another Product Invented Checkers</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     /* Basic layout & styling */
     body {
@@ -31,6 +32,7 @@
       width: 100%;
       height: auto;
       border: 2px solid #333;
+      touch-action: manipulation;
     }
     /* Overlays for menus, instructions, color selection, game over */
     .overlayScreen {
@@ -133,13 +135,14 @@
     let selectedPiece = null; // { r, c } in board coordinates
     let legalMoves = []; // available moves for the selected piece
     let multiCapture = false; // indicates if a multi-capture is in progress
+    let aiThinking = false; // flag to prevent repeated AI moves
 
     const SQUARE_SIZE = canvas.width / 8;
     
     /*******************************
      * Board Orientation Helpers
      *******************************/
-    // For a chess-like flip: if the player is black, we flip the board so that black pieces appear at the bottom.
+    // If the player chooses black, flip the board so that black pieces appear at the bottom.
     function boardToScreen(r, c) {
       if (playerColor === "black") {
         return { sr: 7 - r, sc: 7 - c };
@@ -158,7 +161,6 @@
      *******************************/
     function initBoard() {
       board = [];
-      // Create an 8x8 board initialized to null
       for (let r = 0; r < 8; r++) {
         board[r] = [];
         for (let c = 0; c < 8; c++) {
@@ -191,15 +193,10 @@
      * Drawing Functions
      *******************************/
     function drawBoard() {
-      // Draw board squares using board-to-screen conversion
       for (let r = 0; r < 8; r++) {
         for (let c = 0; c < 8; c++) {
           let { sr, sc } = boardToScreen(r, c);
-          if ((r + c) % 2 === 0) {
-            ctx.fillStyle = "#F0D9B5";  // light square
-          } else {
-            ctx.fillStyle = "#B58863";  // dark square
-          }
+          ctx.fillStyle = ((r + c) % 2 === 0) ? "#F0D9B5" : "#B58863";
           ctx.fillRect(sc * SQUARE_SIZE, sr * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE);
         }
       }
@@ -211,7 +208,6 @@
           const piece = board[r][c];
           if (piece) {
             const { sr, sc } = boardToScreen(r, c);
-            // Draw piece circle
             ctx.beginPath();
             ctx.arc(
               sc * SQUARE_SIZE + SQUARE_SIZE / 2,
@@ -224,7 +220,6 @@
             ctx.fill();
             ctx.strokeStyle = "#000";
             ctx.stroke();
-            // If king, draw a crown mark
             if (piece.king) {
               ctx.fillStyle = "gold";
               ctx.font = "bold " + (SQUARE_SIZE * 0.5) + "px sans-serif";
@@ -275,39 +270,32 @@
     /*******************************
      * Move & Game Logic
      *******************************/
-    // Directions for non-king pieces
     const DIRECTIONS = {
       black: [ { dr: 1, dc: -1 }, { dr: 1, dc: 1 } ],
       red: [ { dr: -1, dc: -1 }, { dr: -1, dc: 1 } ]
     };
-    // Kings move in all four diagonals.
     const KING_DIRECTIONS = [ { dr: 1, dc: -1 }, { dr: 1, dc: 1 }, { dr: -1, dc: -1 }, { dr: -1, dc: 1 } ];
     
-    // Get legal moves for a piece at board position (r, c)
     function getPieceMoves(r, c, boardState = board) {
       const piece = boardState[r][c];
       if (!piece) return [];
       let moves = [];
       const dirs = piece.king ? KING_DIRECTIONS : DIRECTIONS[piece.color];
       
-      // Look for captures first.
+      // Look for captures.
       for (let d of dirs) {
         const midR = r + d.dr, midC = c + d.dc;
         const endR = r + 2 * d.dr, endC = c + 2 * d.dc;
-        if (
-          endR >= 0 && endR < 8 && endC >= 0 && endC < 8 &&
-          midR >= 0 && midR < 8 && midC >= 0 && midC < 8
-        ) {
+        if (endR >= 0 && endR < 8 && endC >= 0 && endC < 8 &&
+            midR >= 0 && midR < 8 && midC >= 0 && midC < 8) {
           const midPiece = boardState[midR][midC];
           if (midPiece && midPiece.color !== piece.color && boardState[endR][endC] === null) {
             moves.push({ from: { r, c }, to: { r: endR, c: endC }, capture: { r: midR, c: midC } });
           }
         }
       }
-      // If capturing moves exist, force capture.
       if (moves.length > 0) return moves;
       
-      // Otherwise, check normal moves.
       for (let d of dirs) {
         const newR = r + d.dr, newC = c + d.dc;
         if (newR >= 0 && newR < 8 && newC >= 0 && newC < 8 && boardState[newR][newC] === null) {
@@ -317,7 +305,6 @@
       return moves;
     }
     
-    // Get all legal moves for the current player.
     function getAllLegalMoves(color) {
       let allMoves = [];
       for (let r = 0; r < 8; r++) {
@@ -331,12 +318,10 @@
           }
         }
       }
-      // If any capture moves exist, force them.
       const captureMoves = allMoves.filter(m => m.capture);
       return captureMoves.length > 0 ? captureMoves : allMoves;
     }
     
-    // Execute a move.
     function makeMove(move) {
       const { from, to, capture } = move;
       const piece = board[from.r][from.c];
@@ -345,25 +330,21 @@
       if (capture) {
         board[capture.r][capture.c] = null;
       }
-      // King promotion: black becomes king at row 7, red at row 0.
       if (!piece.king) {
         if (piece.color === "black" && to.r === 7) piece.king = true;
         if (piece.color === "red" && to.r === 0) piece.king = true;
       }
     }
     
-    // After a capture, check if further capture moves are available.
     function canContinueCapture(r, c) {
       const moves = getPieceMoves(r, c);
       return moves.some(m => m.capture);
     }
     
-    // Switch turns.
     function swapTurn() {
       currentPlayer = (currentPlayer === "black") ? "red" : "black";
     }
     
-    // Check for game over (if current player has no moves).
     function checkGameOver() {
       const moves = getAllLegalMoves(currentPlayer);
       if (moves.length === 0) {
@@ -374,27 +355,20 @@
     }
     
     /*******************************
-     * Input Handling
+     * Input Handling (Mouse & Touch)
      *******************************/
-    canvas.addEventListener("mousedown", (e) => {
-      if (gameState !== "playing") return;
-      if (currentPlayer !== playerColor) return;
-      
+    function processInput(mx, my) {
+      if (gameState !== "playing" || currentPlayer !== playerColor) return;
       const rect = canvas.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
       const sr = Math.floor(my / SQUARE_SIZE);
       const sc = Math.floor(mx / SQUARE_SIZE);
       const { r, c } = screenToBoard(sr, sc);
-      
-      // Only consider dark (playable) squares.
-      if ((r + c) % 2 === 0) return;
+      if ((r + c) % 2 === 0) return; // non-playable square
       
       if (selectedPiece) {
         const move = legalMoves.find(m => m.to.r === r && m.to.c === c);
         if (move) {
           makeMove(move);
-          // For capture moves, if further captures are available, force multi-capture.
           if (move.capture && canContinueCapture(r, c)) {
             selectedPiece = { r, c };
             legalMoves = getPieceMoves(r, c).filter(m => m.capture);
@@ -425,15 +399,76 @@
           redraw();
         }
       }
-    });
+    }
     
-    // "Think For Me" button – makes a move for you.
+    function handleCanvasInput(e) {
+      let clientX = e.clientX, clientY = e.clientY;
+      // For touch events, use the first touch.
+      if (e.touches && e.touches.length > 0) {
+        clientX = e.touches[0].clientX;
+        clientY = e.touches[0].clientY;
+      }
+      processInput(clientX, clientY);
+    }
+    
+    canvas.addEventListener("mousedown", handleCanvasInput);
+    canvas.addEventListener("touchstart", function(e) {
+      e.preventDefault();
+      handleCanvasInput(e);
+    }, { passive: false });
+    
+    /*******************************
+     * AI Turn Handling
+     *******************************/
+    function aiTurn() {
+      if (aiThinking) return;
+      aiThinking = true;
+      setTimeout(() => {
+        const moves = getAllLegalMoves(currentPlayer);
+        if (moves.length === 0) {
+          aiThinking = false;
+          return;
+        }
+        const move = moves[Math.floor(Math.random() * moves.length)];
+        if (selectedPiece && (move.from.r !== selectedPiece.r || move.from.c !== selectedPiece.c)) {
+          const forcedMoves = getPieceMoves(selectedPiece.r, selectedPiece.c).filter(m => m.capture);
+          if (forcedMoves.length) {
+            makeMove(forcedMoves[0]);
+            if (forcedMoves[0].capture && canContinueCapture(forcedMoves[0].to.r, forcedMoves[0].to.c)) {
+              selectedPiece = { r: forcedMoves[0].to.r, c: forcedMoves[0].to.c };
+              legalMoves = getPieceMoves(selectedPiece.r, selectedPiece.c).filter(m => m.capture);
+              aiThinking = false;
+              redraw();
+              return;
+            }
+          }
+        } else {
+          makeMove(move);
+          if (move.capture && canContinueCapture(move.to.r, move.to.c)) {
+            selectedPiece = { r: move.to.r, c: move.to.c };
+            legalMoves = getPieceMoves(selectedPiece.r, selectedPiece.c).filter(m => m.capture);
+            aiThinking = false;
+            redraw();
+            return;
+          }
+        }
+        selectedPiece = null;
+        legalMoves = [];
+        swapTurn();
+        checkGameOver();
+        aiThinking = false;
+        redraw();
+      }, 1000);
+    }
+    
+    /*******************************
+     * "Think For Me" Button Handler
+     *******************************/
     thinkBtn.addEventListener("click", () => {
       if (gameState !== "playing" || currentPlayer !== playerColor) return;
       const moves = getAllLegalMoves(currentPlayer);
       if (moves.length === 0) return;
       const move = moves[Math.floor(Math.random() * moves.length)];
-      // In multi-capture scenarios, force moves from the selected piece.
       if (selectedPiece && (move.from.r !== selectedPiece.r || move.from.c !== selectedPiece.c)) {
         const forcedMoves = getPieceMoves(selectedPiece.r, selectedPiece.c).filter(m => m.capture);
         if (forcedMoves.length) {
@@ -495,6 +530,9 @@
       gameState = "playing";
       initBoard();
       bottomBar.style.display = "flex";
+      selectedPiece = null;
+      legalMoves = [];
+      aiThinking = false;
       redraw();
     }
     
@@ -518,7 +556,6 @@
     };
     document.getElementById("gameOverNewGameBtn").onclick = showColorChoice;
     
-    // Keyboard shortcuts
     document.addEventListener("keydown", (e) => {
       const key = e.key.toLowerCase();
       if (gameState === "color_choice") {
@@ -530,10 +567,14 @@
     });
     
     /*******************************
-     * Main Loop (Redraw)
+     * Main Loop
      *******************************/
     function mainLoop() {
       if (gameState === "playing") {
+        // If it’s not the human’s turn and the game isn’t over, let AI act.
+        if (currentPlayer !== playerColor && !aiThinking) {
+          aiTurn();
+        }
         redraw();
       }
       requestAnimationFrame(mainLoop);
