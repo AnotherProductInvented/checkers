@@ -105,7 +105,7 @@
       <button id="hardBtn">Hard [H]</button>
       <p>You can also press E, M, or H on your keyboard.</p>
     </div>
-    <!-- Instructions Overlay -->
+    <!-- Instructions Overlay with Updated Text -->
     <div id="instructionsScreen" class="overlayScreen">
       <h2>How to Play Checkers</h2>
       <p>
@@ -113,8 +113,10 @@
         Black moves first.<br>
         Each player’s pieces move diagonally forward.<br>
         Capture an opponent’s piece by jumping over it – if a capture is available, you must take it.<br>
-        When a piece reaches the far side, it is crowned as a king and only then is allowed to move backwards, too.<br>
-        <strong>You can capture multiple pieces in one turn.</strong>
+        When a piece reaches the far side, it is crowned as a king and only then is allowed to move backwards and forwards.<br>
+        You can capture multiple pieces in one turn.<br>
+        If you have no legal moves, you lose.<br>
+        If you run out of pieces, you lose.
       </p>
       <p>Press [M] to return to the Main Menu.</p>
     </div>
@@ -129,7 +131,7 @@
     <canvas id="checkersCanvas" width="720" height="720"></canvas>
   </div>
   
-  <!-- Bottom Bar with Turn Info (no "Think For Me" button) -->
+  <!-- Bottom Bar with Turn Info -->
   <div id="bottomBar">
     <span id="turnDisplay">Turn: </span>
   </div>
@@ -228,7 +230,7 @@
     }
     
     /************ Drawing Functions ************/
-    // We draw the board in standard orientation (row 0 at top).
+    // Draw the board in standard orientation (row 0 at top).
     function drawBoard() {
       for (let r = 0; r < 8; r++) {
         for (let c = 0; c < 8; c++) {
@@ -306,7 +308,7 @@
       if (!piece) return [];
       let moves = [];
       let offsets = piece.king ? KING_DIRECTIONS : dirOffsets[piece.color];
-      // Check for capture moves.
+      // First, check for capture moves.
       for (let d of offsets) {
         let midR = r + d.dr, midC = c + d.dc;
         let endR = r + 2 * d.dr, endC = c + 2 * d.dc;
@@ -319,7 +321,7 @@
         }
       }
       if (moves.length > 0) return moves;
-      // Otherwise, normal moves.
+      // Otherwise, check normal moves.
       for (let d of offsets) {
         let newR = r + d.dr, newC = c + d.dc;
         if (newR >= 0 && newR < 8 && newC >= 0 && newC < 8 && bd[newR][newC] === null) {
